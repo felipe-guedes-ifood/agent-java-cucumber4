@@ -61,7 +61,7 @@ class RunningContext {
         ScenarioContext getScenarioContext(TestCase testCase) {
             ScenarioDefinition scenario = getScenario(testCase);
             ScenarioContext context = new ScenarioContext();
-            context.processScenario(scenario);
+            context.processScenario(scenario, testCase);
             context.setTestCase(testCase);
             context.processBackground(getBackground());
             context.processScenarioOutline(scenario);
@@ -158,11 +158,44 @@ class RunningContext {
             attributes = new HashSet<ItemAttributesRQ>();
         }
 
-        void processScenario(ScenarioDefinition scenario) {
+        void processScenario(ScenarioDefinition scenario, TestCase testCase) {
+            if (isScenarioOutline(scenario) && !hasOutlineSteps()) {
+                scenario = overrideScenarioOutlineName(scenario, testCase);
+            }
             this.scenario = scenario;
             for (Step step : scenario.getSteps()) {
                 scenarioLocationMap.put(step.getLocation().getLine(), step);
             }
+        }
+
+        ScenarioDefinition overrideScenarioOutlineName(ScenarioDefinition scenarioDefinition, TestCase testCase) {
+
+            List<TableCell> cells = new ArrayList<TableCell>();
+            List<TableCell> header = new ArrayList<TableCell>();
+            Map<String, String> scenarioOutlineSubstitutionMap = new HashMap<String, String>();
+
+            for (Examples example : ((ScenarioOutline) scenarioDefinition).getExamples()) {
+                for (TableRow tableRow : example.getTableBody()) {
+                    if (tableRow.getLocation().getLine() == testCase.getLine()) {
+                        header = example.getTableHeader().getCells();
+                        cells = tableRow.getCells();
+                    }
+                }
+            }
+
+            for(int i=0; i < header.size(); i++) {
+                scenarioOutlineSubstitutionMap.put(header.get(i).getValue(),cells.get(i).getValue());
+            }
+
+            String newScenarioName = scenarioDefinition.getName();
+            for (Map.Entry<String,String> item : scenarioOutlineSubstitutionMap.entrySet()) {
+                if(newScenarioName.contains("<"+item.getKey()+">")) {
+                    newScenarioName = newScenarioName.replace("<"+item.getKey()+">", item.getValue());
+                }
+            }
+
+            return new Scenario(((ScenarioOutline) scenarioDefinition).getTags(), scenarioDefinition.getLocation(), scenarioDefinition.getKeyword(), newScenarioName, scenarioDefinition.getDescription(), scenarioDefinition.getSteps());
+
         }
 
         void processBackground(Background background) {
